@@ -1,7 +1,7 @@
 const express = require('express');
 const { nanoid } = require("nanoid");
 const bcrypt = require('bcrypt');
-const jwt = require("jsonwebtoken");
+const jwt = require('jsonwebtoken');
 
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
@@ -9,8 +9,8 @@ const swaggerUi = require('swagger-ui-express');
 const app = express();
 const port = 3000;
 
-const ACCESS_SECRET = "access_secret";
-const REFRESH_SECRET = "refresh_secret";
+const ACCESS_SECRET = "access_secret_key";
+const REFRESH_SECRET = "refresh_secret_key";
 
 const ACCESS_EXPIRES_IN = "15m";
 const REFRESH_EXPIRES_IN = "7d";
@@ -19,9 +19,9 @@ const swaggerOptions = {
     definition: {
         openapi: '3.0.0',
         info: {
-            title: 'API AUTH & PRODUCTS',
+            title: 'API PRODUCTS',
             version: '1.0.0',
-            description: 'API для авторизации и управления товарами',
+            description: 'API для  управления товарами',
         },
         servers: [
             {
@@ -29,6 +29,15 @@ const swaggerOptions = {
                 description: 'Локальный сервер',
             },
         ],
+        components: {
+            securitySchemes: {
+                bearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                    bearerFormat: 'JWT',
+                },
+            },
+        },
     },
     apis: ['./server.js'],
 };
@@ -45,6 +54,10 @@ function findUserOr404(email, res) {
         return null;
     }
     return user;
+}
+
+function findUserById(id) {
+    return users.find(u => u.id === id);
 }
 
 function findProductOr404(id, res) {
@@ -66,29 +79,31 @@ async function verifyPassword(password, passwordHash) {
 }
 
 function generateAccessToken(user) {
-  return jwt.sign(
-    {
-      sub: user.id,
-      email: user.email,
-    },
-    ACCESS_SECRET,
-    {
-      expiresIn: ACCESS_EXPIRES_IN,
-    }
-  );
+    return jwt.sign(
+        {
+            sub: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+        },
+        ACCESS_SECRET,
+        {
+            expiresIn: ACCESS_EXPIRES_IN,
+        }
+    );
 }
 
 function generateRefreshToken(user) {
-  return jwt.sign(
-    {
-      sub: user.id,
-      email: user.email,
-    },
-    REFRESH_SECRET,
-    {
-      expiresIn: REFRESH_EXPIRES_IN,
-    }
-  );
+    return jwt.sign(
+        {
+            sub: user.id,
+            email: user.email,
+        },
+        REFRESH_SECRET,
+        {
+            expiresIn: REFRESH_EXPIRES_IN,
+        }
+    );
 }
 
 function authMiddleware(req, res, next) {
@@ -98,7 +113,7 @@ function authMiddleware(req, res, next) {
 
     if (scheme !== "Bearer" || !token) {
         return res.status(401).json({
-            error: "Missing or invalid Authorization header",
+            error: "Missing or invalid Authorization header. Expected format: Bearer <token>",
         });
     }
 
@@ -107,8 +122,13 @@ function authMiddleware(req, res, next) {
         req.user = payload;
         next();
     } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({
+                error: "Token has expired",
+            });
+        }
         return res.status(401).json({
-            error: "Invalid or expired token",
+            error: "Invalid token",
         });
     }
 }
@@ -197,7 +217,7 @@ app.post("/api/auth/register", async (req, res) => {
  * /api/auth/login:
  *   post:
  *     summary: Авторизация пользователя
- *     description: Проверяет email и пароль пользователя
+ *     description: Проверяет email и пароль пользователя, возвращает access и refresh токены
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -217,7 +237,7 @@ app.post("/api/auth/register", async (req, res) => {
  *                 example: qwerty123
  *     responses:
  *       200:
- *         description: Успешная авторизация
+ *         description: Успешная авторизация, возвращены access и refresh токены
  *       401:
  *         description: Неверные учетные данные
  */
@@ -233,28 +253,55 @@ app.post("/api/auth/login", async (req, res) => {
     if (!user) return;
 
     const isAuthenticated = await verifyPassword(password, user.password);
+    if (isAuthenticated) {
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
 
-    if (!isAuthenticated) {
-        return res.status(401).json({ error: "Invalid credentials" });
+        refreshTokens.add(refreshToken);
+
+        res.status(200).json({ 
+            accessToken: accessToken,
+            refreshToken: refreshToken
+        });
+    } else {
+        res.status(401).json({ error: "Invalid credentials" });
     }
-
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
-
-    refreshTokens.add(refreshToken);
-
-    res.status(200).json({
-        accessToken,
-        refreshToken
-    });
 });
+
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Обновление токенов
+ *     description: Получает refresh-токен и возвращает новую пару access и refresh токенов
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     responses:
+ *       200:
+ *         description: Токены успешно обновлены
+ *       400:
+ *         description: Отсутствует refresh-токен
+ *       401:
+ *         description: Неверный или истекший refresh-токен
+ */
 
 app.post("/api/auth/refresh", (req, res) => {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
         return res.status(400).json({
-            error: "Refresh token required",
+            error: "refreshToken is required",
         });
     }
 
@@ -267,9 +314,11 @@ app.post("/api/auth/refresh", (req, res) => {
     try {
         const payload = jwt.verify(refreshToken, REFRESH_SECRET);
 
-        const user = users.find(u => u.id === payload.sub);
+        const user = findUserById(payload.sub);
         if (!user) {
-            return res.status(401).json({ error: "User not found" });
+            return res.status(401).json({
+                error: "User not found",
+            });
         }
 
         refreshTokens.delete(refreshToken);
@@ -281,27 +330,49 @@ app.post("/api/auth/refresh", (req, res) => {
 
         res.json({
             accessToken: newAccessToken,
-            refreshToken: newRefreshToken
+            refreshToken: newRefreshToken,
         });
-
     } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({
+                error: "Refresh token has expired",
+            });
+        }
         return res.status(401).json({
-            error: "Invalid or expired refresh token",
+            error: "Invalid refresh token",
         });
     }
 });
 
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Получить информацию о текущем пользователе
+ *     description: Возвращает данные авторизованного пользователя
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Информация о пользователе
+ *       401:
+ *         description: Требуется авторизация
+ *       404:
+ *         description: Пользователь не найден
+ */
+
 app.get("/api/auth/me", authMiddleware, (req, res) => {
     const userId = req.user.sub;
-
-    const user = users.find(u => u.id === userId);
+    const user = findUserById(userId);
 
     if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({
+            error: "User not found",
+        });
     }
 
-    const { password, ...userWithoutPassword } = user;
-
+    const { password: _, ...userWithoutPassword } = user;
     res.json(userWithoutPassword);
 });
 
@@ -393,6 +464,8 @@ app.get("/api/products", (req, res) => {
  *     summary: Получить товар по id
  *     description: Возвращает параметры товара
  *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -403,6 +476,8 @@ app.get("/api/products", (req, res) => {
  *     responses:
  *       200:
  *         description: Товар успешно найден
+ *       401:
+ *         description: Требуется авторизация
  *       404:
  *         description: Товар не найден
  */
@@ -423,6 +498,8 @@ app.get("/api/products/:id", authMiddleware, (req, res) => {
  *     summary: Обновить параметры товара
  *     description: Обновляет товар по id
  *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -450,6 +527,8 @@ app.get("/api/products/:id", authMiddleware, (req, res) => {
  *         description: Товар успешно обновлен
  *       400:
  *         description: Некорректные данные
+ *       401:
+ *         description: Требуется авторизация
  *       404:
  *         description: Товар не найден
  */
@@ -476,6 +555,7 @@ app.put("/api/products/:id", authMiddleware, (req, res) => {
     }
     
     updatedProduct.updatedAt = new Date().toISOString();
+    updatedProduct.updatedBy = req.user.email;
     
     products[productIndex] = updatedProduct;
     res.status(200).json(updatedProduct);
@@ -486,8 +566,10 @@ app.put("/api/products/:id", authMiddleware, (req, res) => {
  * /api/products/{id}:
  *   delete:
  *     summary: Удалить товар
- *     description: Удаляет товар по id
+ *     description: Удаляет товар по id 
  *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -498,6 +580,8 @@ app.put("/api/products/:id", authMiddleware, (req, res) => {
  *     responses:
  *       200:
  *         description: Товар успешно удален
+ *       401:
+ *         description: Требуется авторизация
  *       404:
  *         description: Товар не найден
  */
