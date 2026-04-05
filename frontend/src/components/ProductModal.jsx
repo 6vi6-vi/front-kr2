@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from "react";
 
 export default function ProductModal({ open, mode, initialProduct, onClose, onSubmit }) {
-    const [title, setTitle] = useState("");        // name → title
+    const [title, setTitle] = useState("");      
     const [category, setCategory] = useState("");
     const [description, setDescription] = useState("");
     const [price, setPrice] = useState("");
-    // Удаляем stock, так как в бекенде нет такого поля
 
     useEffect(() => {
         if (!open) return;
-        setTitle(initialProduct?.title ?? "");     // name → title
+        setTitle(initialProduct?.title ?? "");   
         setCategory(initialProduct?.category ?? "");
         setDescription(initialProduct?.description ?? "");
         setPrice(initialProduct?.price != null ? String(initialProduct.price) : "");
-        // удаляем stock
     }, [open, initialProduct]);
 
     if (!open) return null;
@@ -23,11 +21,10 @@ export default function ProductModal({ open, mode, initialProduct, onClose, onSu
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        const trimmedTitle = title.trim();          // name → title
+        const trimmedTitle = title.trim();          
         const trimmedCategory = category.trim();
         const trimmedDescription = description.trim();
         const parsedPrice = Number(price);
-        // удаляем stock
 
         if (!trimmedTitle) {
             alert("Введите название товара");
@@ -41,15 +38,13 @@ export default function ProductModal({ open, mode, initialProduct, onClose, onSu
             alert("Введите корректную цену");
             return;
         }
-        // удаляем проверку stock
 
         onSubmit({
             id: initialProduct?.id,
-            title: trimmedTitle,                    // name → title
+            title: trimmedTitle,                  
             category: trimmedCategory,
             description: trimmedDescription,
             price: parsedPrice,
-            // удаляем stock
         });
     };
 
@@ -98,7 +93,6 @@ export default function ProductModal({ open, mode, initialProduct, onClose, onSu
                         />
                     </label>
 
-                    {/* Убираем блок с двумя полями, оставляем только цену */}
                     <label className="label">
                         Цена (₽) *
                         <input

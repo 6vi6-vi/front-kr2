@@ -3,10 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage/LoginPage';
 import RegisterPage from './pages/RegisterPage/RegisterPage';
 import ProductsPage from './pages/ProductsPage/ProductsPage';
-import ProductDetailPage from './pages/ProductDetailPage/ProductDetailPage';
 import PrivateRoute from './components/PrivateRoute';
 
 function App() {
+    const isAuthenticated = !!localStorage.getItem('accessToken');
+    
     return (
         <BrowserRouter>
             <Routes>
@@ -17,12 +18,9 @@ function App() {
                         <ProductsPage />
                     </PrivateRoute>
                 } />
-                <Route path="/products/:id" element={
-                    <PrivateRoute>
-                        <ProductDetailPage />
-                    </PrivateRoute>
+                <Route path="/" element={
+                    <Navigate to={isAuthenticated ? "/products" : "/login"} />
                 } />
-                <Route path="/" element={<Navigate to="/login" />} />
             </Routes>
         </BrowserRouter>
     );

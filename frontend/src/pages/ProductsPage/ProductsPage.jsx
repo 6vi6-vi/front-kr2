@@ -32,7 +32,6 @@ export default function ProductsPage() {
         try {
             setLoading(true);
             const data = await api.getProducts();
-            // Исправлено: data.products (а не просто data)
             setProducts(data.products || []);
         } catch (err) {
             console.error(err);

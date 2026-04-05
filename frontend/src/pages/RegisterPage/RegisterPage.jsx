@@ -41,9 +41,7 @@ function RegisterPage() {
             <div className="register-container">
                 <div className="register-card">
                     <div className="register-header">
-                        <div className="brand">Products App</div>
                         <h1 className="register-title">Регистрация</h1>
-                        <p className="register-subtitle">Создайте новый аккаунт</p>
                     </div>
                     
                     {error && <div className="error-message">{error}</div>}
@@ -61,30 +59,28 @@ function RegisterPage() {
                             />
                         </div>
                         
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label>Имя</label>
-                                <input
-                                    type="text"
-                                    name="first_name"
-                                    value={formData.first_name}
-                                    onChange={handleChange}
-                                    placeholder="Иван"
-                                    required
-                                />
-                            </div>
-                            
-                            <div className="form-group">
-                                <label>Фамилия</label>
-                                <input
-                                    type="text"
-                                    name="last_name"
-                                    value={formData.last_name}
-                                    onChange={handleChange}
-                                    placeholder="Петров"
-                                    required
-                                />
-                            </div>
+                        <div className="form-group">
+                            <label>Имя</label>
+                            <input
+                                type="text"
+                                name="first_name"
+                                value={formData.first_name}
+                                onChange={handleChange}
+                                placeholder="Иван"
+                                required
+                            />
+                        </div>
+                        
+                        <div className="form-group">
+                            <label>Фамилия</label>
+                            <input
+                                type="text"
+                                name="last_name"
+                                value={formData.last_name}
+                                onChange={handleChange}
+                                placeholder="Петров"
+                                required
+                            />
                         </div>
                         
                         <div className="form-group">

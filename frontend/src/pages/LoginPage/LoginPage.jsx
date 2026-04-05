@@ -47,9 +47,7 @@ function LoginPage() {
             <div className="login-container">
                 <div className="login-card">
                     <div className="login-header">
-                        <div className="brand">Products App</div>
-                        <h1 className="login-title">Вход в систему</h1>
-                        <p className="login-subtitle">Добро пожаловать!</p>
+                        <h1 className="login-title">Вход</h1>
                     </div>
                     
                     {error && <div className="error-message">{error}</div>}
