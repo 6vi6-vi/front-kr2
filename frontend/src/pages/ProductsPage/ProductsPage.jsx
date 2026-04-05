@@ -49,7 +49,6 @@ export default function ProductsPage() {
         navigate('/login');
     };
 
-    // Проверка прав для создания/редактирования товара
     const canManageProducts = user && (user.role === 'seller' || user.role === 'admin');
     const canDeleteProduct = user && user.role === 'admin';
 
@@ -126,15 +125,19 @@ export default function ProductsPage() {
         <div className="page">
             <header className="header">
                 <div className="header__inner">
-                    <div className="brand">Products App</div>
+                    <div className="header__left">
+                        <div className="brand">Products App</div>
+                        {user && (
+                            <span className={`role-badge role-${user.role} header-role`}>
+                                {getRoleName(user.role)}
+                            </span>
+                        )}
+                    </div>
                     <div className="header__right">
                         {user && (
                             <div className="user-info">
                                 <span className="user-name">
                                     {user.first_name} {user.last_name}
-                                </span>
-                                <span className={`role-badge role-${user.role}`}>
-                                    {getRoleName(user.role)}
                                 </span>
                                 {user.role === 'admin' && (
                                     <button 

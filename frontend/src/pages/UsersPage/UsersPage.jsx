@@ -45,12 +45,19 @@ export default function UsersPage() {
         if (!editingUser) return;
 
         try {
-            const updatedUser = await api.updateUser(editingUser.id, {
+            // Подготавливаем данные для обновления
+            const updateData = {
                 first_name: editingUser.first_name,
                 last_name: editingUser.last_name,
-                role: editingUser.role,
                 isActive: editingUser.isActive
-            });
+            };
+            
+            // Если редактируем НЕ себя, можно менять роль
+            if (editingUser.id !== currentUser?.id) {
+                updateData.role = editingUser.role;
+            }
+            
+            const updatedUser = await api.updateUser(editingUser.id, updateData);
             
             setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
             setEditingUser(null);
@@ -59,20 +66,25 @@ export default function UsersPage() {
         }
     };
 
-    const handleBlockUser = async (user) => {
+    const handleToggleBlockUser = async (user) => {
         if (user.id === currentUser?.id) {
-            alert("Вы не можете заблокировать самого себя");
+            alert("Вы не можете заблокировать/разблокировать самого себя");
             return;
         }
 
-        const ok = window.confirm(`Заблокировать пользователя ${user.first_name} ${user.last_name}?`);
+        const action = user.isActive ? 'заблокировать' : 'разблокировать';
+        const ok = window.confirm(`Вы уверены, что хотите ${action} пользователя ${user.first_name} ${user.last_name}?`);
         if (!ok) return;
 
         try {
-            await api.deleteUser(user.id);
+            if (user.isActive) {
+                await api.deleteUser(user.id);
+            } else {
+                await api.updateUser(user.id, { isActive: true });
+            }
             await loadUsers();
         } catch (err) {
-            alert("Ошибка блокировки пользователя");
+            alert(`Ошибка ${user.isActive ? 'блокировки' : 'разблокировки'} пользователя`);
         }
     };
 
@@ -113,7 +125,6 @@ export default function UsersPage() {
                         <table className="users-table">
                             <thead>
                                 <tr>
-                                    <th>ID</th>
                                     <th>Имя</th>
                                     <th>Фамилия</th>
                                     <th>Email</th>
@@ -124,8 +135,7 @@ export default function UsersPage() {
                             </thead>
                             <tbody>
                                 {users.map(user => (
-                                    <tr key={user.id}>
-                                        <td className="user-id">{user.id.substring(0, 8)}...</td>
+                                    <tr key={user.id} className={!user.isActive ? 'user-blocked-row' : ''}>
                                         <td>{user.first_name}</td>
                                         <td>{user.last_name}</td>
                                         <td>{user.email}</td>
@@ -142,13 +152,23 @@ export default function UsersPage() {
                                             >
                                                 Редактировать
                                             </button>
-                                            <button 
-                                                className="btn btn--danger btn--small" 
-                                                onClick={() => handleBlockUser(user)}
-                                                disabled={!user.isActive}
-                                            >
-                                                Заблокировать
-                                            </button>
+                                            {user.id !== currentUser?.id && (
+                                                user.isActive ? (
+                                                    <button 
+                                                        className="btn btn--danger btn--small" 
+                                                        onClick={() => handleToggleBlockUser(user)}
+                                                    >
+                                                        Заблокировать
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        className="btn btn--success btn--small" 
+                                                        onClick={() => handleToggleBlockUser(user)}
+                                                    >
+                                                        Разблокировать
+                                                    </button>
+                                                )
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -158,12 +178,13 @@ export default function UsersPage() {
                 </div>
             </main>
 
-            {/* Модальное окно редактирования пользователя */}
             {editingUser && (
                 <div className="backdrop" onClick={() => setEditingUser(null)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal user-edit-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal__header">
-                            <div className="modal__title">Редактирование пользователя</div>
+                            <div className="modal__title">
+                                Редактирование пользователя
+                            </div>
                             <button className="iconBtn" onClick={() => setEditingUser(null)}>✕</button>
                         </div>
                         <div className="modal__body">
@@ -173,6 +194,7 @@ export default function UsersPage() {
                                     type="text"
                                     value={editingUser.first_name}
                                     onChange={(e) => setEditingUser({...editingUser, first_name: e.target.value})}
+                                    placeholder="Введите имя"
                                 />
                             </div>
                             <div className="form-group">
@@ -181,31 +203,28 @@ export default function UsersPage() {
                                     type="text"
                                     value={editingUser.last_name}
                                     onChange={(e) => setEditingUser({...editingUser, last_name: e.target.value})}
+                                    placeholder="Введите фамилию"
                                 />
                             </div>
-                            <div className="form-group">
-                                <label>Роль</label>
-                                <select
-                                    value={editingUser.role}
-                                    onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
-                                >
-                                    {getRoleOptions().map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label>
-                                    <input
-                                        type="checkbox"
-                                        checked={editingUser.isActive}
-                                        onChange={(e) => setEditingUser({...editingUser, isActive: e.target.checked})}
-                                    />
-                                    Активен
-                                </label>
-                            </div>
+                            
+                            {editingUser.id !== currentUser?.id ? (
+                                <div className="form-group">
+                                    <label>Роль</label>
+                                    <select
+                                        value={editingUser.role}
+                                        onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
+                                    >
+                                        {getRoleOptions().map(option => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="form-group">
+                                </div>
+                            )}
                         </div>
                         <div className="modal__footer">
                             <button className="btn" onClick={() => setEditingUser(null)}>Отмена</button>

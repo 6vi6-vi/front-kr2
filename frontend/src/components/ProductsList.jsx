@@ -1,8 +1,7 @@
 import React from "react";
-import { Link } from "react-router-dom";
 import ProductItem from "./ProductItem";
 
-export default function ProductsList({ products, onEdit, onDelete }) {
+export default function ProductsList({ products, onEdit, onDelete, canEdit = false, canDelete = false }) {
     if (!products.length) {
         return <div className="empty">Товаров пока нет</div>;
     }
@@ -14,7 +13,9 @@ export default function ProductsList({ products, onEdit, onDelete }) {
                     key={product.id} 
                     product={product} 
                     onEdit={onEdit} 
-                    onDelete={onDelete} 
+                    onDelete={onDelete}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
                 />
             ))}
         </div>

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import ProductDetailModal from "./ProductDetailModal";
 
-export default function ProductItem({ product, onEdit, onDelete }) {
+export default function ProductItem({ product, onEdit, onDelete, canEdit = false, canDelete = false }) {
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
     const openDetailModal = () => {
@@ -48,14 +48,20 @@ export default function ProductItem({ product, onEdit, onDelete }) {
                     </div>
                 </div>
 
-                <div className="productCard__actions">
-                    <button className="btn" onClick={() => onEdit(product)}>
-                        Редактировать
-                    </button>
-                    <button className="btn btn--danger" onClick={() => onDelete(product.id)}>
-                        Удалить
-                    </button>
-                </div>
+                {(canEdit || canDelete) && (
+                    <div className="productCard__actions">
+                        {canEdit && (
+                            <button className="btn btn--primary" onClick={() => onEdit(product)}>
+                                Редактировать
+                            </button>
+                        )}
+                        {canDelete && (
+                            <button className="btn btn--danger" onClick={() => onDelete(product.id)}>
+                                Удалить
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             <ProductDetailModal

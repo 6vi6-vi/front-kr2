@@ -17,6 +17,8 @@ function LoginPage() {
             ...formData,
             [e.target.name]: e.target.value
         });
+        // Очищаем ошибку при вводе
+        if (error) setError('');
     };
 
     const handleSubmit = async (e) => {
@@ -36,7 +38,21 @@ function LoginPage() {
             
             navigate('/products');
         } catch (err) {
-            setError(err.response?.data?.error || 'Ошибка при входе');
+            if (err.response?.status === 401) {
+                const errorMessage = err.response?.data?.error;
+                if (errorMessage === 'Account is blocked') {
+                    setError('Вы были заблокированы администратором');
+                } else if (errorMessage === 'Invalid credentials') {
+                    setError('Неверный email или пароль');
+                } else {
+                    setError(errorMessage || 'Ошибка при входе');
+                }
+            } else if (err.response?.status === 404) {
+                setError('Пользователь с таким email не найден');
+            } else {
+                setError('Ошибка сервера. Попробуйте позже.');
+            }
+            console.error('Login error:', err);
         } finally {
             setLoading(false);
         }
@@ -50,7 +66,11 @@ function LoginPage() {
                         <h1 className="login-title">Вход</h1>
                     </div>
                     
-                    {error && <div className="error-message">{error}</div>}
+                    {error && (
+                        <div className="error-message">
+                            {error}
+                        </div>
+                    )}
                     
                     <form onSubmit={handleSubmit} className="login-form">
                         <div className="form-group">

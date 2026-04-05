@@ -24,6 +24,15 @@ apiClient.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
         
+        // ИСКЛЮЧАЕМ запросы на /auth/login и /auth/register из обработки
+        const isAuthEndpoint = originalRequest.url?.includes('/auth/login') || 
+                               originalRequest.url?.includes('/auth/register');
+        
+        // Если это эндпоинт аутентификации - просто возвращаем ошибку
+        if (isAuthEndpoint) {
+            return Promise.reject(error);
+        }
+        
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             
