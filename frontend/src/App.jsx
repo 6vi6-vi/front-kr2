@@ -1,57 +1,30 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import Navbar from './components/Navbar';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './pages/LoginPage/LoginPage';
+import RegisterPage from './pages/RegisterPage/RegisterPage';
+import ProductsPage from './pages/ProductsPage/ProductsPage';
+import ProductDetailPage from './pages/ProductDetailPage/ProductDetailPage';
 import PrivateRoute from './components/PrivateRoute';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Products from './pages/Products';
-import ProductDetail from './pages/ProductDetail';
-import ProductForm from './pages/ProductForm';
 
 function App() {
     return (
-        <div className="app">
-            <Navbar />
-            <div className="container">
-                <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/" element={<Navigate to="/products" />} />
-                    <Route
-                        path="/products"
-                        element={
-                            <PrivateRoute>
-                                <Products />
-                            </PrivateRoute>
-                        }
-                    />
-                    <Route
-                        path="/products/new"
-                        element={
-                            <PrivateRoute>
-                                <ProductForm />
-                            </PrivateRoute>
-                        }
-                    />
-                    <Route
-                        path="/products/:id"
-                        element={
-                            <PrivateRoute>
-                                <ProductDetail />
-                            </PrivateRoute>
-                        }
-                    />
-                    <Route
-                        path="/products/:id/edit"
-                        element={
-                            <PrivateRoute>
-                                <ProductForm />
-                            </PrivateRoute>
-                        }
-                    />
-                </Routes>
-            </div>
-        </div>
+        <BrowserRouter>
+            <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/products" element={
+                    <PrivateRoute>
+                        <ProductsPage />
+                    </PrivateRoute>
+                } />
+                <Route path="/products/:id" element={
+                    <PrivateRoute>
+                        <ProductDetailPage />
+                    </PrivateRoute>
+                } />
+                <Route path="/" element={<Navigate to="/login" />} />
+            </Routes>
+        </BrowserRouter>
     );
 }
 
