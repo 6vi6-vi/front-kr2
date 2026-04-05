@@ -12,13 +12,13 @@ const port = 3000;
 
 app.use(cors({
     origin: 'http://localhost:5173',
-    credentials: true, 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-const ACCESS_SECRET = "access_secret_key";
-const REFRESH_SECRET = "refresh_secret_key";
+const ACCESS_SECRET = "access_secret_key_here";
+const REFRESH_SECRET = "refresh_secret_key_here";
 
 const ACCESS_EXPIRES_IN = "15m";
 const REFRESH_EXPIRES_IN = "7d";
@@ -27,9 +27,9 @@ const swaggerOptions = {
     definition: {
         openapi: '3.0.0',
         info: {
-            title: 'API PRODUCTS',
+            title: 'API AUTH & PRODUCTS & USERS',
             version: '1.0.0',
-            description: 'API для  управления товарами',
+            description: 'API с системой ролей (RBAC)',
         },
         servers: [
             {
@@ -55,13 +55,8 @@ let products = [];
 
 const refreshTokens = new Set();
 
-function findUserOr404(email, res) {
-    const user = users.find(u => u.email == email);
-    if (!user) {
-        res.status(404).json({ error: "User not found" });
-        return null;
-    }
-    return user;
+function findUserByEmail(email) {
+    return users.find(u => u.email === email);
 }
 
 function findUserById(id) {
@@ -93,6 +88,7 @@ function generateAccessToken(user) {
             email: user.email,
             first_name: user.first_name,
             last_name: user.last_name,
+            role: user.role
         },
         ACCESS_SECRET,
         {
@@ -106,6 +102,7 @@ function generateRefreshToken(user) {
         {
             sub: user.id,
             email: user.email,
+            role: user.role
         },
         REFRESH_SECRET,
         {
@@ -116,7 +113,6 @@ function generateRefreshToken(user) {
 
 function authMiddleware(req, res, next) {
     const header = req.headers.authorization || "";
-
     const [scheme, token] = header.split(" ");
 
     if (scheme !== "Bearer" || !token) {
@@ -141,9 +137,19 @@ function authMiddleware(req, res, next) {
     }
 }
 
+function roleMiddleware(allowedRoles) {
+    return (req, res, next) => {
+        if (!req.user || !allowedRoles.includes(req.user.role)) {
+            return res.status(403).json({
+                error: "Forbidden: You don't have permission to access this resource",
+            });
+        }
+        next();
+    };
+}
+
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -156,54 +162,36 @@ app.use((req, res, next) => {
     next();
 });
 
+
 /**
  * @swagger
  * /api/auth/register:
  *   post:
  *     summary: Регистрация пользователя
- *     description: Создает нового пользователя с хешированным паролем
+ *     description: Доступ - Гость
  *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - first_name
- *               - last_name
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 example: ivan@example.com
- *               first_name:
- *                 type: string
- *                 example: Иван
- *               last_name:
- *                 type: string
- *                 example: Петров
- *               password:
- *                 type: string
- *                 example: qwerty123
- *     responses:
- *       201:
- *         description: Пользователь успешно создан
- *       400:
- *         description: Некорректные данные
  */
-
 app.post("/api/auth/register", async (req, res) => {
-    const { email, first_name, last_name, password } = req.body;
+    const { email, first_name, last_name, password, role } = req.body;
 
     if (!email || !first_name || !last_name || !password) {
         return res.status(400).json({ error: "email, first_name, last_name and password are required" });
     }
 
-    const existingUser = users.find(u => u.email === email);
+    const existingUser = findUserByEmail(email);
     if (existingUser) {
         return res.status(400).json({ error: "User with this email already exists" });
+    }
+
+    let userRole = "user";
+    
+    if (role && (role === "admin" || role === "seller")) {
+        const hasAdmin = users.some(u => u.role === "admin");
+        if (!hasAdmin && role === "admin") {
+            userRole = "admin";
+        } else if (role === "seller") {
+            userRole = "seller";
+        }
     }
 
     const newUser = {
@@ -211,7 +199,10 @@ app.post("/api/auth/register", async (req, res) => {
         email: email,
         first_name: first_name,
         last_name: last_name,
-        password: await hashPassword(password)
+        password: await hashPassword(password),
+        role: userRole,
+        isActive: true,
+        createdAt: new Date().toISOString()
     };
 
     users.push(newUser);
@@ -224,32 +215,10 @@ app.post("/api/auth/register", async (req, res) => {
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Авторизация пользователя
- *     description: Проверяет email и пароль пользователя, возвращает access и refresh токены
+ *     summary: Вход в систему
+ *     description: Доступ - Гость
  *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 example: ivan@example.com
- *               password:
- *                 type: string
- *                 example: qwerty123
- *     responses:
- *       200:
- *         description: Успешная авторизация, возвращены access и refresh токены
- *       401:
- *         description: Неверные учетные данные
  */
-
 app.post("/api/auth/login", async (req, res) => {
     const { email, password } = req.body;
 
@@ -257,53 +226,39 @@ app.post("/api/auth/login", async (req, res) => {
         return res.status(400).json({ error: "email and password are required" });
     }
 
-    const user = findUserOr404(email, res);
-    if (!user) return;
-
-    const isAuthenticated = await verifyPassword(password, user.password);
-    if (isAuthenticated) {
-        const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
-
-        refreshTokens.add(refreshToken);
-
-        res.status(200).json({ 
-            accessToken: accessToken,
-            refreshToken: refreshToken
-        });
-    } else {
-        res.status(401).json({ error: "Invalid credentials" });
+    const user = findUserByEmail(email);
+    if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
     }
+
+    if (!user.isActive) {
+        return res.status(401).json({ error: "Account is blocked" });
+    }
+
+    const isValid = await verifyPassword(password, user.password);
+    if (!isValid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    refreshTokens.add(refreshToken);
+
+    res.status(200).json({ 
+        accessToken: accessToken,
+        refreshToken: refreshToken
+    });
 });
 
 /**
  * @swagger
  * /api/auth/refresh:
  *   post:
- *     summary: Обновление токенов
- *     description: Получает refresh-токен и возвращает новую пару access и refresh токенов
+ *     summary: Обновление пары токенов
+ *     description: Доступ - Гость
  *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - refreshToken
- *             properties:
- *               refreshToken:
- *                 type: string
- *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *     responses:
- *       200:
- *         description: Токены успешно обновлены
- *       400:
- *         description: Отсутствует refresh-токен
- *       401:
- *         description: Неверный или истекший refresh-токен
  */
-
 app.post("/api/auth/refresh", (req, res) => {
     const { refreshToken } = req.body;
 
@@ -323,9 +278,9 @@ app.post("/api/auth/refresh", (req, res) => {
         const payload = jwt.verify(refreshToken, REFRESH_SECRET);
 
         const user = findUserById(payload.sub);
-        if (!user) {
+        if (!user || !user.isActive) {
             return res.status(401).json({
-                error: "User not found",
+                error: "User not found or blocked",
             });
         }
 
@@ -341,13 +296,8 @@ app.post("/api/auth/refresh", (req, res) => {
             refreshToken: newRefreshToken,
         });
     } catch (err) {
-        if (err.name === 'TokenExpiredError') {
-            return res.status(401).json({
-                error: "Refresh token has expired",
-            });
-        }
         return res.status(401).json({
-            error: "Invalid refresh token",
+            error: "Invalid or expired refresh token",
         });
     }
 });
@@ -357,19 +307,11 @@ app.post("/api/auth/refresh", (req, res) => {
  * /api/auth/me:
  *   get:
  *     summary: Получить информацию о текущем пользователе
- *     description: Возвращает данные авторизованного пользователя
+ *     description: Доступ - Пользователь, Продавец, Администратор
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Информация о пользователе
- *       401:
- *         description: Требуется авторизация
- *       404:
- *         description: Пользователь не найден
  */
-
 app.get("/api/auth/me", authMiddleware, (req, res) => {
     const userId = req.user.sub;
     const user = findUserById(userId);
@@ -386,43 +328,122 @@ app.get("/api/auth/me", authMiddleware, (req, res) => {
 
 /**
  * @swagger
+ * /api/users:
+ *   get:
+ *     summary: Получить список пользователей
+ *     description: Доступ - Администратор
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.get("/api/users", authMiddleware, roleMiddleware(["admin"]), (req, res) => {
+    const usersWithoutPasswords = users.map(({ password, ...user }) => user);
+    res.json({
+        count: usersWithoutPasswords.length,
+        users: usersWithoutPasswords
+    });
+});
+
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   get:
+ *     summary: Получить пользователя по id
+ *     description: Доступ - Администратор
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.get("/api/users/:id", authMiddleware, roleMiddleware(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const user = findUserById(id);
+    
+    if (!user) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    
+    const { password, ...userWithoutPassword } = user;
+    res.json(userWithoutPassword);
+});
+
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   put:
+ *     summary: Обновить информацию пользователя
+ *     description: Доступ - Администратор
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.put("/api/users/:id", authMiddleware, roleMiddleware(["admin"]), async (req, res) => {
+    const { id } = req.params;
+    const { first_name, last_name, role, isActive } = req.body;
+    
+    const userIndex = users.findIndex(u => u.id === id);
+    if (userIndex === -1) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    
+    const updatedUser = { ...users[userIndex] };
+    
+    if (first_name) updatedUser.first_name = first_name;
+    if (last_name) updatedUser.last_name = last_name;
+    if (role) updatedUser.role = role;
+    if (isActive !== undefined) updatedUser.isActive = isActive;
+    
+    updatedUser.updatedAt = new Date().toISOString();
+    updatedUser.updatedBy = req.user.email;
+    
+    users[userIndex] = updatedUser;
+    
+    const { password, ...userWithoutPassword } = updatedUser;
+    res.json(userWithoutPassword);
+});
+
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   delete:
+ *     summary: Заблокировать пользователя
+ *     description: Доступ - Администратор
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.delete("/api/users/:id", authMiddleware, roleMiddleware(["admin"]), (req, res) => {
+    const { id } = req.params;
+    const userIndex = users.findIndex(u => u.id === id);
+    
+    if (userIndex === -1) {
+        return res.status(404).json({ error: "User not found" });
+    }
+    
+    if (users[userIndex].id === req.user.sub) {
+        return res.status(400).json({ error: "You cannot block yourself" });
+    }
+    
+    users[userIndex].isActive = false;
+    users[userIndex].blockedAt = new Date().toISOString();
+    users[userIndex].blockedBy = req.user.email;
+    
+    res.json({ 
+        message: "User blocked successfully",
+        user: { id: users[userIndex].id, email: users[userIndex].email, isActive: false }
+    });
+});
+
+/**
+ * @swagger
  * /api/products:
  *   post:
  *     summary: Создать товар
- *     description: Создает новый товар
+ *     description: Доступ - Продавец, Администратор
  *     tags: [Products]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - title
- *               - category
- *               - description
- *               - price
- *             properties:
- *               title:
- *                 type: string
- *                 example: Ноутбук
- *               category:
- *                 type: string
- *                 example: Электроника
- *               description:
- *                 type: string
- *                 example: Мощный ноутбук для игр и работы
- *               price:
- *                 type: number
- *                 example: 60000
- *     responses:
- *       201:
- *         description: Товар успешно создан
- *       400:
- *         description: Некорректные данные
+ *     security:
+ *       - bearerAuth: []
  */
-
-app.post("/api/products", async (req, res) => {
+app.post("/api/products", authMiddleware, roleMiddleware(["seller", "admin"]), async (req, res) => {
     const { title, category, description, price } = req.body;
 
     if (!title || !category || !description || price === undefined) {
@@ -439,7 +460,8 @@ app.post("/api/products", async (req, res) => {
         category: category,
         description: description,
         price: price,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        createdBy: req.user.email
     };
 
     products.push(newProduct);
@@ -451,14 +473,12 @@ app.post("/api/products", async (req, res) => {
  * /api/products:
  *   get:
  *     summary: Получить список товаров
- *     description: Возвращает список всех товаров
+ *     description: Доступ - Пользователь, Продавец, Администратор
  *     tags: [Products]
- *     responses:
- *       200:
- *         description: Список товаров успешно получен
+ *     security:
+ *       - bearerAuth: []
  */
-
-app.get("/api/products", (req, res) => {
+app.get("/api/products", authMiddleware, roleMiddleware(["user", "seller", "admin"]), (req, res) => {
     res.status(200).json({
         count: products.length,
         products: products
@@ -470,27 +490,12 @@ app.get("/api/products", (req, res) => {
  * /api/products/{id}:
  *   get:
  *     summary: Получить товар по id
- *     description: Возвращает параметры товара
+ *     description: Доступ - Пользователь, Продавец, Администратор
  *     tags: [Products]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID товара
- *     responses:
- *       200:
- *         description: Товар успешно найден
- *       401:
- *         description: Требуется авторизация
- *       404:
- *         description: Товар не найден
  */
-
-app.get("/api/products/:id", authMiddleware, (req, res) => {
+app.get("/api/products/:id", authMiddleware, roleMiddleware(["user", "seller", "admin"]), (req, res) => {
     const { id } = req.params;
     const product = findProductOr404(id, res);
     
@@ -504,44 +509,12 @@ app.get("/api/products/:id", authMiddleware, (req, res) => {
  * /api/products/{id}:
  *   put:
  *     summary: Обновить параметры товара
- *     description: Обновляет товар по id
+ *     description: Доступ - Продавец, Администратор
  *     tags: [Products]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID товара
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               title:
- *                 type: string
- *               category:
- *                 type: string
- *               description:
- *                 type: string
- *               price:
- *                 type: number
- *     responses:
- *       200:
- *         description: Товар успешно обновлен
- *       400:
- *         description: Некорректные данные
- *       401:
- *         description: Требуется авторизация
- *       404:
- *         description: Товар не найден
  */
-
-app.put("/api/products/:id", authMiddleware, (req, res) => {
+app.put("/api/products/:id", authMiddleware, roleMiddleware(["seller", "admin"]), (req, res) => {
     const { id } = req.params;
     const { title, category, description, price } = req.body;
     
@@ -574,27 +547,12 @@ app.put("/api/products/:id", authMiddleware, (req, res) => {
  * /api/products/{id}:
  *   delete:
  *     summary: Удалить товар
- *     description: Удаляет товар по id 
+ *     description: Доступ - Администратор
  *     tags: [Products]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID товара
- *     responses:
- *       200:
- *         description: Товар успешно удален
- *       401:
- *         description: Требуется авторизация
- *       404:
- *         description: Товар не найден
  */
-
-app.delete("/api/products/:id", authMiddleware, (req, res) => {
+app.delete("/api/products/:id", authMiddleware, roleMiddleware(["admin"]), (req, res) => {
     const { id } = req.params;
     const productIndex = products.findIndex(p => p.id === id);
     
@@ -611,7 +569,171 @@ app.delete("/api/products/:id", authMiddleware, (req, res) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`Сервер запущен на http://localhost:${port}`);
+async function initTestUsers() {
+    const adminExists = users.find(u => u.email === 'admin@mail.com');
+    if (!adminExists) {
+        users.push({
+            id: nanoid(),
+            email: 'admin@mail.com',
+            first_name: 'Валерия',
+            last_name: 'Иванова',
+            password: await bcrypt.hash('admin123', 10),
+            role: 'admin',
+            isActive: true,
+            createdAt: new Date().toISOString()
+        });
+    }
+
+    const seller1Exists = users.find(u => u.email === 'seller1@mail.com');
+    if (!seller1Exists) {
+        users.push({
+            id: nanoid(),
+            email: 'seller1@mail.com',
+            first_name: 'Продавец',
+            last_name: 'Первый',
+            password: await bcrypt.hash('seller_1', 10),
+            role: 'seller',
+            isActive: true,
+            createdAt: new Date().toISOString()
+        });
+    }
+
+    const seller2Exists = users.find(u => u.email === 'seller2@mail.com');
+    if (!seller2Exists) {
+        users.push({
+            id: nanoid(),
+            email: 'seller2@mail.com',
+            first_name: 'Продавец',
+            last_name: 'Второй',
+            password: await bcrypt.hash('seller_2', 10),
+            role: 'seller',
+            isActive: true,
+            createdAt: new Date().toISOString()
+        });
+    }
+}
+
+
+async function initTestProducts() {
+    if (products.length === 0) {
+        const defaultProducts = [
+            {
+                id: nanoid(),
+                title: 'Стиральная машина',
+                category: 'Бытовая техника',
+                description: '7 кг, 1200 об/мин. Защита от протечек.',
+                price: 35000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Холодильник',
+                category: 'Бытовая техника',
+                description: 'No Frost, общий объем 325 л. Управление электронное, LED подсветка.',
+                price: 46000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Телевизор',
+                category: 'Электроника',
+                description: '55 дюймов, Smart TV, HDR, Android TV. 4K разрешение.',
+                price: 68000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Ноутбук',
+                category: 'Компьютеры',
+                description: 'Intel Core i7, 16GB RAM, SSD 512GB, видеокарта RTX 3060.',
+                price: 90000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'iPhone 15',
+                category: 'Смартфоны',
+                description: '128GB, двойная камера 48 МП, Dynamic Island, USB-C.',
+                price: 90000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Планшет',
+                category: 'Электроника',
+                description: '11 дюймов, M2 чип, 256GB, поддержка Apple Pencil.',
+                price: 110000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Наушники',
+                category: 'Аксессуары',
+                description: 'Беспроводные, активное шумоподавление, до 30 часов работы.',
+                price: 28000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Кофемашина',
+                category: 'Бытовая техника',
+                description: 'Автоматическая, 15 бар, встроенная кофемолка.',
+                price: 46000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Фитнес-браслет',
+                category: 'Аксессуары',
+                description: 'AMOLED экран, пульсометр, измерение кислорода в крови, GPS.',
+                price: 4000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Монитор',
+                category: 'Компьютеры',
+                description: '27 дюймов, 240Hz, QLED, 1ms отклика, HDR400.',
+                price: 35000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Пылесос',
+                category: 'Бытовая техника',
+                description: 'Беспроводной, лазерная подсветка, до 60 минут работы.',
+                price: 60000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            },
+            {
+                id: nanoid(),
+                title: 'Умные часы',
+                category: 'Аксессуары',
+                description: 'GPS, измерение кислорода в крови, ECG, AMOLED экран.',
+                price: 43000,
+                createdAt: new Date().toISOString(),
+                createdBy: 'system'
+            }
+        ];
+
+        products.push(...defaultProducts);
+    }
+}
+
+app.listen(port, async () => {
+    await initTestUsers();
+    await initTestProducts(); 
+    console.log(`\nСервер запущен на http://localhost:${port}`);
     console.log(`Swagger UI доступен по адресу http://localhost:${port}/api-docs`);
 });

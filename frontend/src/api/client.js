@@ -59,6 +59,10 @@ apiClient.interceptors.response.use(
             }
         }
         
+        if (error.response?.status === 403) {
+            alert(error.response?.data?.error || 'У вас нет прав для этого действия');
+        }
+        
         return Promise.reject(error);
     }
 );
@@ -91,6 +95,26 @@ export const api = {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
+    },
+
+    getUsers: async () => {
+        const response = await apiClient.get("/users");
+        return response.data;
+    },
+
+    getUserById: async (id) => {
+        const response = await apiClient.get(`/users/${id}`);
+        return response.data;
+    },
+
+    updateUser: async (id, userData) => {
+        const response = await apiClient.put(`/users/${id}`, userData);
+        return response.data;
+    },
+
+    deleteUser: async (id) => {
+        const response = await apiClient.delete(`/users/${id}`);
+        return response.data;
     },
 
     createProduct: async (product) => {

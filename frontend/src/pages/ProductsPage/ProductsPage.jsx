@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./ProductsPage.css";
-
 import ProductsList from "../../components/ProductsList";
 import ProductModal from "../../components/ProductModal";
 import { api } from "../../api/client";
@@ -35,7 +34,11 @@ export default function ProductsPage() {
             setProducts(data.products || []);
         } catch (err) {
             console.error(err);
-            alert("Ошибка загрузки товаров");
+            if (err.response?.status === 403) {
+                alert("У вас нет прав для просмотра товаров");
+            } else {
+                alert("Ошибка загрузки товаров");
+            }
         } finally {
             setLoading(false);
         }
@@ -46,13 +49,25 @@ export default function ProductsPage() {
         navigate('/login');
     };
 
+    // Проверка прав для создания/редактирования товара
+    const canManageProducts = user && (user.role === 'seller' || user.role === 'admin');
+    const canDeleteProduct = user && user.role === 'admin';
+
     const openCreate = () => {
+        if (!canManageProducts) {
+            alert("У вас нет прав для создания товаров");
+            return;
+        }
         setModalMode("create");
         setEditingProduct(null);
         setModalOpen(true);
     };
 
     const openEdit = (product) => {
+        if (!canManageProducts) {
+            alert("У вас нет прав для редактирования товаров");
+            return;
+        }
         setModalMode("edit");
         setEditingProduct(product);
         setModalOpen(true);
@@ -64,6 +79,11 @@ export default function ProductsPage() {
     };
 
     const handleDelete = async (id) => {
+        if (!canDeleteProduct) {
+            alert("Только администратор может удалять товары");
+            return;
+        }
+        
         const ok = window.confirm("Удалить товар?");
         if (!ok) return;
 
@@ -94,6 +114,14 @@ export default function ProductsPage() {
         }
     };
 
+    const getRoleName = (role) => {
+        switch (role) {
+            case 'admin': return 'Администратор';
+            case 'seller': return 'Продавец';
+            default: return 'Пользователь';
+        }
+    };
+
     return (
         <div className="page">
             <header className="header">
@@ -105,6 +133,17 @@ export default function ProductsPage() {
                                 <span className="user-name">
                                     {user.first_name} {user.last_name}
                                 </span>
+                                <span className={`role-badge role-${user.role}`}>
+                                    {getRoleName(user.role)}
+                                </span>
+                                {user.role === 'admin' && (
+                                    <button 
+                                        onClick={() => navigate('/users')} 
+                                        className="btn btn--primary btn--small"
+                                    >
+                                        Управление пользователями
+                                    </button>
+                                )}
                                 <button 
                                     onClick={handleLogout} 
                                     className="btn btn--danger btn--small"
@@ -121,9 +160,11 @@ export default function ProductsPage() {
                 <div className="container">
                     <div className="toolbar">
                         <h1 className="title">Каталог товаров</h1>
-                        <button className="btn btn--primary" onClick={openCreate}>
-                            + Добавить товар
-                        </button>
+                        {canManageProducts && (
+                            <button className="btn btn--primary" onClick={openCreate}>
+                                + Добавить товар
+                            </button>
+                        )}
                     </div>
 
                     {loading ? (
@@ -133,6 +174,8 @@ export default function ProductsPage() {
                             products={products}
                             onEdit={openEdit}
                             onDelete={handleDelete}
+                            canEdit={canManageProducts}
+                            canDelete={canDeleteProduct}
                         />
                     )}
                 </div>

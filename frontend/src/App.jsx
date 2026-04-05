@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage/LoginPage';
 import RegisterPage from './pages/RegisterPage/RegisterPage';
 import ProductsPage from './pages/ProductsPage/ProductsPage';
+import UsersPage from './pages/UsersPage/UsersPage';
 import PrivateRoute from './components/PrivateRoute';
 
 function App() {
@@ -16,6 +17,11 @@ function App() {
                 <Route path="/products" element={
                     <PrivateRoute>
                         <ProductsPage />
+                    </PrivateRoute>
+                } />
+                <Route path="/users" element={
+                    <PrivateRoute>
+                        <UsersPage />
                     </PrivateRoute>
                 } />
                 <Route path="/" element={
